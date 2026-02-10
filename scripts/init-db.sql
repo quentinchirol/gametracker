@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS Players (
     player_id INT PRIMARY KEY,
     username VARCHAR(100) NOT NULL,
-    email VARCHAR(200) NOT NULL,
+    email VARCHAR(200),
     registration_date DATE NOT NULL,
     country VARCHAR(100),
     level INT DEFAULT 1
@@ -21,4 +21,5 @@ CREATE TABLE IF NOT EXISTS Scores (
         FOREIGN KEY (player_id)
         REFERENCES Players(player_id)
         ON DELETE CASCADE
+
 );
