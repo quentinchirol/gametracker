@@ -38,6 +38,7 @@ services:
         condition: service_healthy
     stdin_open: true
     tty: true
+    command: ["bash", "-c", "./scripts/run_pipeline.sh && tail -f /dev/null"]
 
 volumes:
   mysql_data:

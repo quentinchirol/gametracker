@@ -3,18 +3,18 @@ import mysql.connector
 
 def load_players(df: pd.DataFrame, conn) -> int:
     """
-    Charge les joueurs dans MySQL en utilisant executemany pour la performance.
+    Charge les joueurs dans la base de données MySQL de manière optimisée.
     """
     cursor = conn.cursor()
     
-    # Préparation des données : conversion des types Pandas vers types Python natifs
-    # On gère les dates et on remplace les NaN par None (que MySQL comprend comme NULL)
-    data_to_load = []
+    # Préparation des données pour MySQL (conversion NaN -> None)
+    data = []
     for _, row in df.iterrows():
-        data_to_load.append((
+        data.append((
             int(row['player_id']),
             str(row['username']),
-            row['email'] if pd.notna(row['email']) else None,
+            # Provide a placeholder email when missing to satisfy NOT NULL constraint
+            row['email'] if pd.notna(row['email']) else f"unknown_{int(row['player_id'])}@example.local",
             row['registration_date'].strftime('%Y-%m-%d') if pd.notna(row['registration_date']) else '2000-01-01',
             row['country'] if pd.notna(row['country']) else None,
             int(row['level']) if pd.notna(row['level']) else 1
@@ -32,10 +32,10 @@ def load_players(df: pd.DataFrame, conn) -> int:
     """
     
     try:
-        cursor.executemany(query, data_to_load)
+        cursor.executemany(query, data)
         conn.commit()
-        print(f"✅ Succès : {cursor.rowcount} lignes traitées dans Players")
-        return len(df)
+        print(f"✅ Chargé {len(data)} joueurs dans MySQL")
+        return len(data)
     except mysql.connector.Error as err:
         print(f"❌ Erreur lors du chargement des joueurs : {err}")
         conn.rollback()
@@ -43,19 +43,29 @@ def load_players(df: pd.DataFrame, conn) -> int:
 
 def load_scores(df: pd.DataFrame, conn) -> int:
     """
-    Charge les scores dans MySQL.
+    Charge les scores dans la base de données MySQL.
     """
     cursor = conn.cursor()
     
-    data_to_load = []
+    # Verify which player_ids actually exist in the database to avoid FK errors
+    cursor.execute("SELECT player_id FROM Players")
+    existing_players = {int(r[0]) for r in cursor.fetchall()}
+
+    data = []
+    skipped = 0
     for _, row in df.iterrows():
-        data_to_load.append((
+        pid = int(row['player_id'])
+        if pid not in existing_players:
+            skipped += 1
+            continue
+        data.append((
             str(row['score_id']),
-            int(row['player_id']),
+            pid,
             str(row['game']),
             int(row['score']),
             int(row['duration_minutes']) if pd.notna(row['duration_minutes']) else None,
-            row['played_at'].strftime('%Y-%m-%d %H:%M:%S') if pd.notna(row['played_at']) else None,
+            # Ensure played_at is not NULL to satisfy DB constraint; use a fallback timestamp
+            row['played_at'].strftime('%Y-%m-%d %H:%M:%S') if pd.notna(row['played_at']) else '2000-01-01 00:00:00',
             row['platform'] if pd.notna(row['platform']) else None
         ))
 
@@ -70,10 +80,12 @@ def load_scores(df: pd.DataFrame, conn) -> int:
     """
     
     try:
-        cursor.executemany(query, data_to_load)
+        cursor.executemany(query, data)
         conn.commit()
-        print(f"✅ Succès : {cursor.rowcount} lignes traitées dans Scores")
-        return len(df)
+        print(f"✅ Chargé {len(data)} scores dans MySQL")
+        if skipped:
+            print(f"⚠️ {skipped} scores ignorés car le joueur n'existe pas en base")
+        return len(data)
     except mysql.connector.Error as err:
         print(f"❌ Erreur lors du chargement des scores : {err}")
         conn.rollback()
